@@ -1,0 +1,1 @@
+这是一个标准的 Node.js + Express.js + Prisma + PostgreSQL/MySQL 项目。它只包含后端 API 逻辑和数据库模型

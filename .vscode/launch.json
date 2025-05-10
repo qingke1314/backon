@@ -1,0 +1,30 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Main Process (Launch)", // 启动 Electron 并调试
+      "type": "node", // 注意：在 Electron 5 时代可能需要 "node" 或特定 Electron 调试器插件类型
+      "request": "launch",
+      "cwd": "${workspaceFolder}", // 你的项目根目录
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron",
+      "runtimeArgs": [
+        ".", // 指向你的应用入口 (main.js 所在的目录)
+        "--inspect-brk" // 使用 inspect-brk 在启动时暂停
+      ],
+      "windows": {
+        // Windows 下路径可能需要调整
+        "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron.cmd"
+      },
+      "port": 9229, // 确保与 --inspect-brk/--inspect 端口一致
+      "outputCapture": "std"
+    },
+    {
+      "name": "Attach to Main Process", // 附加到已运行的带 --inspect 的进程
+      "type": "node",
+      "request": "attach",
+      "port": 9229, // 需要匹配 Electron 启动时使用的端口
+      "protocol": "inspector",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

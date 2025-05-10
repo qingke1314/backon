@@ -1,0 +1,12 @@
+{
+  "workbench.editor.reuseExistingEditor": false,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "eslint.validate": ["javascript", "typescript", "jsx", "tsx"],
+  "editor.formatOnSave": true,
+  "editor.fontSize": 16,
+  "editor.lineHeight": 22,
+  "editor.fontFamily": "Operator Mono Lig"
+}
