@@ -1,0 +1,13 @@
+{
+    "locale":"zh-CN",
+    "editor.fontSize": 16,
+    "editor.fontWeight": "bold",
+    "editor.fontFamily": "Fira Code",
+    "editor.fontLigatures": false,
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": false,
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": true,
+    "editor.formatOnType": true
+}
