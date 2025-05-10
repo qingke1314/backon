@@ -11,11 +11,11 @@ const port = 3001;
 
 // 启用 CORS
 app.use(cors());
-
 // 配置文件存储
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, 'updates');
+    const uploadDir = path.join(__dirname, '..', 'updates');
+    console.log(uploadDir);
     // 确保目录存在
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
@@ -29,8 +29,6 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// 静态文件服务
-app.use('/updates', express.static(path.join(__dirname, 'updates')));
 
 // 文件上传接口
 app.post('/upload', upload.single('file'), (req, res) => {
@@ -41,6 +39,10 @@ app.post('/upload', upload.single('file'), (req, res) => {
     message: '文件上传成功',
     filename: req.file.originalname
   });
+});
+
+app.get('/', (req, res) => {
+  res.send('Hello from Express backend!'); // 或者渲染一个页面
 });
 
 // 获取文件列表接口
