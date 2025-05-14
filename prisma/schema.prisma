@@ -17,21 +17,25 @@ model User {
   password  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  posts     Post[]
-  comments  Comment[]
+  posts     Post[]     // 用户撰写的文章
+  comments  Comment[]  // 用户发表的评论
+  favorites Favorite[] // 用户收藏的条目
 }
 
 model Post {
-  id         Int      @id @default(autoincrement())
-  title      String
-  content    String   @db.LongText
-  published  Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  author     User     @relation(fields: [authorId], references: [id])
-  authorId   Int
-  categories Category[]
-  comments   Comment[]
+  id           Int        @id @default(autoincrement())
+  title        String
+  content      String     @db.LongText
+  published    Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  lastEditedAt DateTime?  @updatedAt
+  previewText  String?
+  author       User       @relation(fields: [authorId], references: [id])
+  authorId     Int
+  categories   Category[]
+  comments     Comment[]
+  favoritedBy  Favorite[] // 记录哪些收藏条目指向这篇文章
 }
 
 model Category {
@@ -49,4 +53,16 @@ model Comment {
   authorId  Int
   post      Post     @relation(fields: [postId], references: [id])
   postId    Int
+}
+
+// 新增：Favorite 模型，用于 User 和 Post 之间的多对多关系
+model Favorite {
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      Int
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId      Int
+  favoritedAt DateTime @default(now()) // 收藏时间
+
+  @@id([userId, postId]) // 复合主键，确保一个用户对一篇文章只能收藏一次
+  @@unique([userId, postId]) // 同样确保唯一性，可以省略如果@@id已定义，但有时为清晰起见会保留
 }

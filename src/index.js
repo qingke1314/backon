@@ -1,10 +1,9 @@
 import express from "express";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import cors from "cors";
 import dotenv from "dotenv";
-import { Prisma } from "@prisma/client";
 
 dotenv.config();
 if (!process.env.JWT_SECRET) {
@@ -45,18 +44,75 @@ app.get("/", (req, res) => {
 /**
  * 获取所有文章
  */
-app.get("/posts/getAll", authenticateToken, async (_req, res) => {
+app.get("/posts/getAll", authenticateToken, async (req, res) => {
   try {
-    // 使用 Prisma Client 查询数据库获取所有文章
-    const posts = await prisma.post.findMany({
-      select: {
-        // Select specific fields, excluding 'content'
-        id: true,
-        title: true,
-        published: true,
-        createdAt: true,
-        updatedAt: true,
-        authorId: true,
+    // 从查询参数中获取过滤条件，并重命名以区分
+    const {
+      isFavorited: isFavoritedQuery,
+      authorId: authorIdQuery,
+      published: publishedQuery,
+      lastEditedAfter: lastEditedAfterQuery,
+    } = req.query;
+
+    const currentUserId = req.user.userId; // 获取当前登录用户的ID
+
+    // 核心可见性规则：
+    // 1. 文章已发布，或
+    // 2. 文章是草稿且作者是当前用户
+    const coreVisibilityConditions = {
+      OR: [
+        { published: true },
+        { published: false, authorId: currentUserId },
+      ],
+    };
+
+    const additionalFilters = []; // 用于存放来自查询参数的额外过滤条件
+
+    // 处理 isFavorited 查询参数 (根据当前用户是否收藏来过滤)
+    if (isFavoritedQuery !== undefined) {
+      if (isFavoritedQuery === 'true') {
+        additionalFilters.push({ favoritedBy: { some: { userId: currentUserId } } });
+      } else if (isFavoritedQuery === 'false') {
+        additionalFilters.push({ favoritedBy: { none: { userId: currentUserId } } });
+      }
+    }
+
+    // 处理 authorId 查询参数 (显式按作者ID过滤)
+    if (authorIdQuery !== undefined) {
+      const parsedAuthorId = parseInt(authorIdQuery, 10);
+      if (isNaN(parsedAuthorId)) {
+        return res.status(400).json({ error: "无效的 authorId 查询参数格式" });
+      }
+      additionalFilters.push({ authorId: parsedAuthorId });
+    }
+
+    // 处理 published 查询参数 (显式按发布状态过滤)
+    if (publishedQuery !== undefined) {
+      additionalFilters.push({ published: publishedQuery === 'true' });
+    }
+
+    // 处理 lastEditedAfter 查询参数
+    if (lastEditedAfterQuery !== undefined) {
+      const timestamp = Number(lastEditedAfterQuery);
+      if (isNaN(timestamp)) {
+        return res.status(400).json({ error: "无效的 lastEditedAfter 时间戳格式" });
+      }
+      const dateFilter = new Date(timestamp);
+      if (isNaN(dateFilter.getTime())) {
+        return res.status(400).json({ error: "无效的 lastEditedAfter 时间戳值，无法转换为有效日期" });
+      }
+      additionalFilters.push({ lastEditedAt: { gt: dateFilter } });
+    }
+
+    // 组合核心可见性规则和额外过滤条件
+    const whereClause = {
+      AND: [coreVisibilityConditions, ...additionalFilters],
+    };
+
+    // 使用 Prisma Client 查询数据库获取文章
+    const postsFromDb = await prisma.post.findMany({
+      where: whereClause, // 应用组合后的过滤条件
+      include: { // 使用 include 来获取 favoritedBy 关联，以便后续处理
         author: {
           select: {
             id: true,
@@ -69,16 +125,40 @@ app.get("/posts/getAll", authenticateToken, async (_req, res) => {
             name: true,
           },
         },
-        // Explicitly exclude content: content: false, // This is implicitly done by not including it in select
+        favoritedBy: { // 包含收藏信息，限定为当前用户的收藏
+          where: {
+            userId: currentUserId,
+          },
+          select: {
+            userId: true, // 只需要知道是否存在即可
+          }
+        },
       },
       orderBy: {
         createdAt: "desc",
       },
     });
-    // 将查询结果以 JSON 格式返回给客户端
-    res.json(posts);
+
+    // 为每篇文章添加 isUserOwner 和 isFavoritedByCurrentUser 字段
+    const postsWithDerivedFields = postsFromDb.map(post => ({
+      // 手动选择需要的字段，因为我们移除了顶层 select
+      id: post.id,
+      title: post.title,
+      published: post.published,
+      createdAt: post.createdAt,
+      updatedAt: post.updatedAt,
+      lastEditedAt: post.lastEditedAt,
+      previewText: post.previewText,
+      authorId: post.authorId,
+      author: post.author, // 来自 include
+      categories: post.categories, // 来自 include
+      comments: post.comments, // 如果之前有 comments，也需要手动包含或通过 include 获取
+      isUserOwner: post.authorId === currentUserId,
+      isFavoritedByCurrentUser: post.favoritedBy && post.favoritedBy.length > 0,
+    }));
+
+    res.json(postsWithDerivedFields);
   } catch (error) {
-    // 捕获错误并返回错误响应
     console.error("获取文章失败:", error);
     res.status(500).json({ error: "无法获取文章列表" });
   }
@@ -90,8 +170,8 @@ app.get("/posts/getAll", authenticateToken, async (_req, res) => {
 app.get("/posts/:id", authenticateToken, async (req, res) => {
   const { id } = req.params;
   try {
-    const post = await prisma.post.findUnique({
-      where: { id: parseInt(id) }, // Ensure id is an integer
+    const postFromDb = await prisma.post.findUnique({
+      where: { id: parseInt(id) },
       include: {
         author: {
           select: {
@@ -105,15 +185,43 @@ app.get("/posts/:id", authenticateToken, async (req, res) => {
             name: true,
           },
         },
-        // Comments can be included here if needed
-        // comments: true,
+        comments: true, // 假设需要包含评论信息
+        favoritedBy: { // 包含收藏信息，限定为当前用户的收藏
+          where: {
+            userId: req.user.userId, // 直接使用 req.user.userId
+          },
+          select: {
+            userId: true, // 只需要知道是否存在即可
+          },
+        },
       },
     });
 
-    if (!post) {
+    if (!postFromDb) {
       return res.status(404).json({ error: "文章未找到" });
     }
-    res.json(post);
+
+    const currentUserId = req.user.userId;
+    const responsePost = {
+      // 手动选择需要的字段，并添加衍生字段
+      id: postFromDb.id,
+      title: postFromDb.title,
+      content: postFromDb.content, // 单篇文章通常会返回完整 content
+      published: postFromDb.published,
+      createdAt: postFromDb.createdAt,
+      updatedAt: postFromDb.updatedAt,
+      lastEditedAt: postFromDb.lastEditedAt,
+      previewText: postFromDb.previewText,
+      authorId: postFromDb.authorId,
+      author: postFromDb.author,
+      categories: postFromDb.categories,
+      comments: postFromDb.comments,
+      isUserOwner: postFromDb.authorId === currentUserId,
+      isFavoritedByCurrentUser: postFromDb.favoritedBy && postFromDb.favoritedBy.length > 0,
+      // favoritedBy: postFromDb.favoritedBy, // 原始收藏者列表，通常不在单篇详情中直接暴露
+    };
+
+    res.json(responsePost);
   } catch (error) {
     console.error(`获取文章 (ID: ${id}) 失败:`, error);
     // Differentiate between 'not found' due to invalid ID format vs. actual not found
@@ -138,26 +246,50 @@ app.post("/posts/add", authenticateToken, async (req, res) => {
   }
   try {
     const userId = req.user.userId;
-    await prisma.post.create({
+    const now = new Date(); // 获取当前时间
+
+    let previewTextValue = "";
+    if (content) {
+      const plainContent = content.replace(/<[^>]*>/g, ""); // 去除HTML标签
+      if (plainContent.length > 20) {
+        previewTextValue = plainContent.substring(0, 20) + "...";
+      } else {
+        previewTextValue = plainContent;
+      }
+    }
+
+    const newPost = await prisma.post.create({
       data: {
         title,
-        content,
+        content, // 原始内容（包含HTML）仍然保存到数据库
         published: published ?? false,
         author: {
           connect: { id: userId },
         },
+        createdAt: now,
+        lastEditedAt: now,
+        previewText: previewTextValue, // 基于去除HTML后的内容生成previewText
       },
       include: {
         author: {
           select: { id: true, name: true },
         },
+        categories: true, // 包含分类信息
       },
     });
+
+    // 为响应添加 isUserOwner 字段 (对于新创建的帖子，作者总是当前用户)
+    const responsePost = {
+      ...newPost,
+      isUserOwner: true, // 或者 newPost.authorId === userId，但这里肯定是 true
+    };
+
     res.status(201).json({
       message: published ? "发布成功" : "新增成功",
       status: 201,
       success: true,
-    }); // 201 Created
+      data: responsePost, // 返回带有 isUserOwner 的文章数据
+    });
   } catch (error) {
     console.error("创建文章失败：", error);
     res.status(500).json({ error: "创建文章过程中发生错误" });
@@ -171,7 +303,9 @@ app.post("/posts/add", authenticateToken, async (req, res) => {
 app.patch("/posts/:id", authenticateToken, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.userId;
-  const { title, content, published } = req.body;
+  // 从请求体中解构出可能需要更新的字段
+  // isFavorited 已被移除，因为它现在通过 Favorite 表管理
+  const { title, content, published, previewText } = req.body;
 
   try {
     const postId = parseInt(id);
@@ -187,21 +321,39 @@ app.patch("/posts/:id", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "文章未找到" });
     }
 
+    // 权限检查：只有作者才能编辑自己的文章的主要内容
+    // 收藏状态的修改将通过新的专用接口处理，不由作者权限限制
     if (post.authorId !== userId) {
-      return res.status(403).json({ error: "无权限修改此文章" });
+      // 如果不是作者，检查是否只尝试修改非作者限制字段（未来可能添加，当前没有）
+      // 如果尝试修改 title, content, published, previewText 等核心字段，则拒绝
+      if (title !== undefined || content !== undefined || published !== undefined || previewText !== undefined) {
+        return res.status(403).json({ error: "无权限修改此文章的核心内容" });
+      }
     }
 
-    // Prepare data for update, only include fields that are actually provided
     const updateData = {};
     if (title !== undefined) updateData.title = title;
-    if (content !== undefined) updateData.content = content;
     if (published !== undefined) updateData.published = published;
+    // if (isFavorited !== undefined) updateData.isFavorited = isFavorited; // 旧逻辑，已移除
 
-    if (Object.keys(updateData).length === 0) {
-      return res.status(400).json({ error: "未提供任何需要更新的字段" });
+    if (content !== undefined) {
+      updateData.content = content;
+      const plainContent = content.replace(/<[^>]*>/g, "");
+      if (plainContent.trim() === "") {
+        updateData.previewText = "";
+      } else {
+        updateData.previewText = plainContent.length > 20 ? plainContent.substring(0, 20) + "..." : plainContent;
+      }
+    } else if (previewText !== undefined) {
+      updateData.previewText = previewText;
     }
 
-    await prisma.post.update({
+    // 如果没有任何实际要更新的字段（除了收藏状态，它现在分开处理）
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: "未提供任何需要更新的字段（收藏状态请使用专用接口）" });
+    }
+
+    const updatedPost = await prisma.post.update({
       where: { id: postId },
       data: updateData,
       include: {
@@ -214,10 +366,17 @@ app.patch("/posts/:id", authenticateToken, async (req, res) => {
       },
     });
 
+    // 为响应添加 isUserOwner 字段
+    const responsePost = {
+      ...updatedPost,
+      isUserOwner: updatedPost.authorId === userId, // userId 是当前登录用户的ID
+    };
+
     res.status(200).json({
       message: "更新成功",
       status: 200,
       success: true,
+      data: responsePost, // 返回带有 isUserOwner 的文章数据
     });
   } catch (error) {
     console.error(`编辑文章 (ID: ${id}) 失败:`, error);
@@ -282,7 +441,6 @@ app.delete("/posts/:id", authenticateToken, async (req, res) => {
 // POST /users - 用户注册接口
 app.post("/users", async (req, res) => {
   const { email, name, password } = req.body;
-  console.log(req, "req");
 
   // 1. 数据校验 (基本示例，实际应用中需要更完善的校验)
   if (!email || !password) {
@@ -351,14 +509,14 @@ app.post("/login", async (req, res) => {
     // 3. 检查用户是否存在
     if (!user) {
       // 出于安全考虑，不应该暴露是用户名不存在还是密码错误
-      return res.status(401).json({ error: "邮箱或密码不正确" }); // 401 Unauthorized
+      return res.status(405).json({ message: "用户未注册" }); // 401 Unauthorized
     }
     // 4. 比对密码
     // 比较用户输入的密码和数据库中存储的加密密码
     const isMatch = await bcrypt.compare(password, user.password);
     // 5. 检查密码是否匹配
     if (!isMatch) {
-      return res.status(401).json({ error: "邮箱或密码不正确" }); // 401 Unauthorized
+      return res.status(405).json({ message: "邮箱或密码不正确" }); // 401 Unauthorized
     }
     // 6. 密码匹配，生成 JWT Token
     // token 中通常包含用户 ID 和其他非敏感信息
@@ -472,6 +630,89 @@ app.post("/posts/:postId/comments", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("创建评论失败:", error);
     res.status(500).json({ error: "创建评论过程中发生错误" });
+  }
+});
+
+// POST /posts/:postId/favorite - 收藏一篇文章
+app.post("/posts/:postId/favorite", authenticateToken, async (req, res) => {
+  const postId = parseInt(req.params.postId, 10);
+  const userId = req.user.userId;
+
+  if (isNaN(postId)) {
+    return res.status(400).json({ error: "无效的文章 ID" });
+  }
+
+  try {
+    // 1. 检查文章是否存在
+    const post = await prisma.post.findUnique({ where: { id: postId } });
+    if (!post) {
+      return res.status(404).json({ error: "文章未找到" });
+    }
+
+    // 2. 检查是否已收藏 (避免重复收藏)
+    const existingFavorite = await prisma.favorite.findUnique({
+      where: {
+        userId_postId: { // 使用在 Favorite 模型中定义的 @@id([userId, postId])
+          userId: userId,
+          postId: postId,
+        },
+      },
+    });
+
+    if (existingFavorite) {
+      return res.status(200).json({ message: "文章已收藏", success: true, alreadyFavorited: true });
+    }
+
+    // 3. 创建收藏记录
+    await prisma.favorite.create({
+      data: {
+        userId: userId,
+        postId: postId,
+      },
+    });
+
+    res.status(201).json({ message: "文章收藏成功", success: true });
+  } catch (error) {
+    console.error(`收藏文章 (ID: ${postId}) 失败:`, error);
+    // 处理 Prisma 特有的错误，例如 P2002 代表唯一约束失败
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      // 虽然我们已经检查了 existingFavorite，但作为双重保险
+      return res.status(409).json({ error: "操作冲突，文章可能已被收藏" });
+    }
+    res.status(500).json({ error: "收藏文章过程中发生错误" });
+  }
+});
+
+// DELETE /posts/:postId/favorite - 取消收藏一篇文章
+app.delete("/posts/:postId/favorite", authenticateToken, async (req, res) => {
+  const postId = parseInt(req.params.postId, 10);
+  const userId = req.user.userId;
+
+  if (isNaN(postId)) {
+    return res.status(400).json({ error: "无效的文章 ID" });
+  }
+
+  try {
+    // 尝试删除收藏记录。
+    // Prisma 的 deleteMany 在找不到匹配项时不会抛错，而是返回 count: 0。
+    // 对于复合主键，也可以使用 prisma.favorite.delete({ where: { userId_postId: { userId, postId } } })
+    // 但 delete 在找不到记录时会抛出 P2025 错误，需要额外捕获。deleteMany 更直接。
+    const deleteResult = await prisma.favorite.deleteMany({
+      where: {
+        userId: userId,
+        postId: postId,
+      },
+    });
+
+    if (deleteResult.count === 0) {
+      // 如果没有记录被删除，说明用户之前未收藏该文章或已被取消
+      return res.status(404).json({ error: "收藏记录未找到或已被取消" });
+    }
+
+    res.status(200).json({ message: "文章取消收藏成功", success: true });
+  } catch (error) {
+    console.error(`取消收藏文章 (ID: ${postId}) 失败:`, error);
+    res.status(500).json({ error: "取消收藏文章过程中发生错误" });
   }
 });
 
