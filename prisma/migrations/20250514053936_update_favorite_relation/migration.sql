@@ -5,7 +5,7 @@
 
 */
 -- AlterTable
-ALTER TABLE `post` DROP COLUMN `isFavorited`;
+ALTER TABLE `Post` DROP COLUMN `isFavorited`;
 
 -- CreateTable
 CREATE TABLE `Favorite` (
