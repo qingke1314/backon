@@ -20,6 +20,8 @@ model User {
   posts     Post[]     // 用户撰写的文章
   comments  Comment[]  // 用户发表的评论
   favorites Favorite[] // 用户收藏的条目
+  avatar      String?
+  phoneNumber String?
 }
 
 model Post {

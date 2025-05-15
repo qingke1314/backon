@@ -37,6 +37,39 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+app.post("/validateToken", authenticateToken, async (req, res) => {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
+  jwt.verify(token, process.env.JWT_SECRET, async (err, user) => {
+    if (err) {
+      return res.sendStatus(401); // Forbidden if token is not valid
+    } else {
+      const payload = { userId: user.userId, email: user.email };
+      // 重新生成 token
+      const newToken = jwt.sign(
+        payload,
+        process.env.JWT_SECRET, // 从环境变量中获取密钥
+        { expiresIn: "1d" } // 设置 token 有效期，例如 1 天
+      );
+      const currentUser = await prisma.user.findUnique({
+        where: { id: user.userId },
+      });
+      res.status(200).json({
+        success: true,
+        token: newToken,
+        user: {
+          // 返回用户部分信息，不包括密码哈希
+          id: currentUser.id,
+          email: currentUser.email,
+          name: currentUser.name,
+          avatar: currentUser.avatar,
+          phoneNumber: currentUser.phoneNumber,
+        },
+      });
+    }
+  });
+});
+
 app.get("/", (req, res) => {
   res.send("Hello World");
 });
@@ -524,7 +557,7 @@ app.post("/login", async (req, res) => {
     const token = jwt.sign(
       payload,
       process.env.JWT_SECRET, // 从环境变量中获取密钥
-      { expiresIn: "1h" } // 设置 token 有效期，例如 1 小时
+      { expiresIn: "1d" } // 设置 token 有效期，例如 1 天
     );
     // 7. 登录成功，返回 token 和用户部分信息
     res.status(200).json({
@@ -535,11 +568,63 @@ app.post("/login", async (req, res) => {
         id: user.id,
         email: user.email,
         name: user.name,
+        avatar: user.avatar,
+        phoneNumber: user.phoneNumber,
       },
     });
   } catch (error) {
     console.error("用户登录失败:", error);
     res.status(500).json({ error: "用户登录过程中发生错误" });
+  }
+});
+
+// POST /users/change-password - 修改当前登录用户密码
+app.post("/users/changePassword", authenticateToken, async (req, res) => {
+  const userId = req.user.userId;
+  const { oldPassword, newPassword } = req.body;
+
+  // 1. 数据校验
+  if (!oldPassword || !newPassword) {
+    return res.status(400).json({ error: "旧密码和新密码是必需的" });
+  }
+
+  // 可选：添加新密码复杂度校验，例如长度
+  if (newPassword.length < 6) { // 假设最小长度为6
+    return res.status(400).json({ error: "新密码长度至少为6位" });
+  }
+
+  try {
+    // 2. 查找用户
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    //理论上 authenticateToken 已经确保用户存在，但作为安全检查
+    if (!user) {
+      return res.status(404).json({ error: "用户未找到" });
+    }
+
+    // 3. 比对旧密码
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: "旧密码不正确" });
+    }
+
+    // 4. 加密新密码
+    const salt = await bcrypt.genSalt(10);
+    const hashedNewPassword = await bcrypt.hash(newPassword, salt);
+
+    // 5. 更新用户密码
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedNewPassword },
+    });
+
+    res.status(200).json({ message: "密码修改成功", success: true });
+
+  } catch (error) {
+    console.error("修改密码失败:", error);
+    res.status(500).json({ error: "修改密码过程中发生错误" });
   }
 });
 
@@ -713,6 +798,70 @@ app.delete("/posts/:postId/favorite", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error(`取消收藏文章 (ID: ${postId}) 失败:`, error);
     res.status(500).json({ error: "取消收藏文章过程中发生错误" });
+  }
+});
+
+// PUT /users/profile - 修改当前登录用户信息
+app.patch("/users/profile", authenticateToken, async (req, res) => {
+  const userId = req.user.userId;
+  const { name, avatar, phoneNumber } = req.body;
+
+  // 构建需要更新的数据对象
+  const updateData = {};
+  if (name !== undefined) {
+    updateData.name = name;
+  }
+  if (avatar !== undefined) {
+    // 简单校验 avatar 是否为有效的 URL 或置空
+    if (avatar === "" || (typeof avatar === 'string' && avatar.startsWith('http'))) {
+      updateData.avatar = avatar;
+    } else if (avatar !== null) { // 允许 null 来清除，但不允许无效的非空字符串
+      return res.status(400).json({ error: "头像链接格式不正确" });
+    }
+  }
+  if (phoneNumber !== undefined) {
+    // 简单校验手机号格式或置空
+    // 你可能需要更复杂的手机号校验逻辑
+    if (phoneNumber === "" || (typeof phoneNumber === 'string' && /^[0-9+-]*$/.test(phoneNumber))) {
+      updateData.phoneNumber = phoneNumber;
+    } else if (phoneNumber !== null) { // 允许 null 来清除
+      return res.status(400).json({ error: "手机号码格式不正确" });
+    }
+  }
+
+  // 如果没有提供任何可更新的字段
+  if (Object.keys(updateData).length === 0) {
+    return res.status(400).json({ error: "未提供任何需要更新的信息" });
+  }
+
+  try {
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: {
+        // 选择返回更新后的用户信息，不包括密码哈希
+        id: true,
+        email: true,
+        name: true,
+        avatar: true,
+        phoneNumber: true,
+        createdAt: true,
+        updatedAt: true, // Prisma 会自动更新 updatedAt
+      },
+    });
+
+    res.status(200).json({
+      message: "用户信息更新成功",
+      success: true,
+      data: updatedUser,
+    });
+  } catch (error) {
+    console.error("更新用户信息失败:", error);
+    // 处理可能的 Prisma 错误，例如用户不存在 (虽然理论上 authenticateToken 会保证用户存在)
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+        return res.status(404).json({ error: "用户未找到" });
+    }
+    res.status(500).json({ error: "更新用户信息过程中发生错误" });
   }
 });
 
