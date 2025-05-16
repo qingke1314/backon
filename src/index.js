@@ -922,7 +922,7 @@ app.post("/users/upload-avatar", authenticateToken, (req, res) => {
       return res.status(400).json({ success: false, message: "请选择要上传的图片文件" });
     }
     const userId = req.user.userId;
-    const fileUrl = `http://localhost:3000/uploads/avatars/${req.file.filename}`;
+    const fileUrl = `http://118.178.197.208:9981/public/uploads/avatars/${req.file.filename}`;
 
     try {
       await prisma.user.update({
