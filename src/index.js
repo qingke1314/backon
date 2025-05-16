@@ -4,6 +4,10 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import cors from "cors";
 import dotenv from "dotenv";
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url'; // 用于获取当前文件的绝对路径
 
 dotenv.config();
 if (!process.env.JWT_SECRET) {
@@ -11,13 +15,55 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
+// ESM 环境下获取 __dirname 的等价物
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const PORT = process.env.PORT || 3000;
 const app = express();
 const prisma = new PrismaClient();
 
+// 确保上传目录存在
+const uploadsDir = path.join(__dirname, 'public', 'uploads', 'avatars');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// 配置 Express 静态服务 public 目录
+app.use(express.static(path.join(__dirname, 'public')));
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // 解析URL-encoded数据
+
+// Multer 文件存储配置
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir); // 保存到 'public/uploads/avatars/'
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+// Multer 文件过滤器 (只允许图片)
+const imageFileFilter = (req, file, cb) => {
+  if (file.mimetype === 'image/jpeg' || file.mimetype === 'image/png' || file.mimetype === 'image/gif') {
+    cb(null, true);
+  } else {
+    cb(new Error('仅支持上传 JPG, PNG, GIF 格式的图片!'), false);
+  }
+};
+
+// 初始化 Multer upload 实例
+const upload = multer({
+  storage: storage,
+  fileFilter: imageFileFilter,
+  limits: {
+    fileSize: 1024 * 1024 * 2 // 限制文件大小为 2MB (可选)
+  }
+}).single('avatarFile'); // 'avatarFile' 必须与前端 el-upload 的 name 属性一致
 
 // Middleware for token authentication
 const authenticateToken = (req, res, next) => {
@@ -38,35 +84,29 @@ const authenticateToken = (req, res, next) => {
 };
 
 app.post("/validateToken", authenticateToken, async (req, res) => {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
-  jwt.verify(token, process.env.JWT_SECRET, async (err, user) => {
-    if (err) {
-      return res.sendStatus(401); // Forbidden if token is not valid
-    } else {
-      const payload = { userId: user.userId, email: user.email };
-      // 重新生成 token
-      const newToken = jwt.sign(
-        payload,
-        process.env.JWT_SECRET, // 从环境变量中获取密钥
-        { expiresIn: "1d" } // 设置 token 有效期，例如 1 天
-      );
-      const currentUser = await prisma.user.findUnique({
-        where: { id: user.userId },
-      });
-      res.status(200).json({
-        success: true,
-        token: newToken,
-        user: {
-          // 返回用户部分信息，不包括密码哈希
-          id: currentUser.id,
-          email: currentUser.email,
-          name: currentUser.name,
-          avatar: currentUser.avatar,
-          phoneNumber: currentUser.phoneNumber,
-        },
-      });
-    }
+  // 如果 authenticateToken 成功，req.user 就包含了用户信息
+  // 直接使用 req.user 来生成新 token 和响应
+  const payload = { userId: req.user.userId, email: req.user.email };
+  // 重新生成 token
+  const newToken = jwt.sign(
+    payload,
+    process.env.JWT_SECRET, // 从环境变量中获取密钥
+    { expiresIn: "1d" } // 设置 token 有效期，例如 1 天
+  );
+  const currentUser = await prisma.user.findUnique({
+    where: { id: req.user.userId },
+  });
+  res.status(200).json({
+    success: true,
+    token: newToken,
+    user: {
+      // 返回用户部分信息，不包括密码哈希
+      id: currentUser.id,
+      email: currentUser.email,
+      name: currentUser.name,
+      avatar: currentUser.avatar,
+      phoneNumber: currentUser.phoneNumber,
+    },
   });
 });
 
@@ -812,11 +852,12 @@ app.patch("/users/profile", authenticateToken, async (req, res) => {
     updateData.name = name;
   }
   if (avatar !== undefined) {
-    // 简单校验 avatar 是否为有效的 URL 或置空
-    if (avatar === "" || (typeof avatar === 'string' && avatar.startsWith('http'))) {
-      updateData.avatar = avatar;
-    } else if (avatar !== null) { // 允许 null 来清除，但不允许无效的非空字符串
-      return res.status(400).json({ error: "头像链接格式不正确" });
+    // 校验 avatar 是否为有效的 URL (以 http 或 / 开头) 或空字符串/null
+    if (avatar === "" || avatar === null ||
+        (typeof avatar === 'string' && (avatar.startsWith('http') || avatar.startsWith('/')))) {
+      updateData.avatar = avatar; // 允许空字符串或 null 来清除头像
+    } else {
+        return res.status(400).json({ error: "头像链接格式不正确，应为有效的URL或相对路径，或为空以清除头像" });
     }
   }
   if (phoneNumber !== undefined) {
@@ -863,6 +904,46 @@ app.patch("/users/profile", authenticateToken, async (req, res) => {
     }
     res.status(500).json({ error: "更新用户信息过程中发生错误" });
   }
+});
+
+// POST /users/upload-avatar - 用户上传头像接口
+app.post("/users/upload-avatar", authenticateToken, (req, res) => {
+  upload(req, res, async function (err) {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ success: false, message: "文件过大，最大允许 5MB" });
+      }
+      return res.status(400).json({ success: false, message: `Multer错误: ${err.message}` });
+    } else if (err) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "请选择要上传的图片文件" });
+    }
+    const userId = req.user.userId;
+    const fileUrl = `http://localhost:3000/uploads/avatars/${req.file.filename}`;
+
+    try {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { avatar: fileUrl }
+      });
+
+      res.status(200).json({
+        success: true,
+        data: { url: fileUrl },
+        message: "头像上传成功"
+      });
+    } catch (dbError) {
+      console.error("更新用户头像URL失败:", dbError);
+      // 可选: 删除已上传的文件以避免孤立文件
+      // fs.unlink(req.file.path, (unlinkErr) => {
+      //   if (unlinkErr) console.error("删除文件失败:", unlinkErr);
+      // });
+      res.status(500).json({ success: false, message: "服务器内部错误，更新头像信息失败" });
+    }
+  });
 });
 
 // 在应用关闭时断开 Prisma 连接 (可选，但推荐)
