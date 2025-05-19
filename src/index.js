@@ -38,7 +38,7 @@ app.post('/api/upload-image-custom', editorUpload, (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded.' });
   }
-  const imageUrl = `http://localhost:3000/public/uploads/editor/${req.file.filename}`;
+  const imageUrl = `http://118.178.197.208:9981/public/uploads/editor/${req.file.filename}`;
   res.json({ location: imageUrl });
 });
 

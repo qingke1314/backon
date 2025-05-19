@@ -216,7 +216,7 @@ router.post("/upload-avatar", authenticateToken, (req, res) => {
     }
 
     const userId = req.user.userId;
-    const fileUrl = `http://localhost:3000/public/uploads/avatars/${req.file.filename}`;
+    const fileUrl = `http://118.178.197.208:9981/public/uploads/avatars/${req.file.filename}`;
 
     try {
       await prisma.user.update({
