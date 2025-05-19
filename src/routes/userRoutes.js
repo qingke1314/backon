@@ -236,4 +236,34 @@ router.post("/upload-avatar", authenticateToken, (req, res) => {
   });
 });
 
+// 验证 token 并刷新
+router.post("/validateToken", authenticateToken, async (req, res) => {
+  try {
+    const payload = { userId: req.user.userId, email: req.user.email };
+    // 重新生成 token
+    const newToken = jwt.sign(
+      payload,
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+    const currentUser = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+    });
+    res.status(200).json({
+      success: true,
+      token: newToken,
+      user: {
+        id: currentUser.id,
+        email: currentUser.email,
+        name: currentUser.name,
+        avatar: currentUser.avatar,
+        phoneNumber: currentUser.phoneNumber,
+      },
+    });
+  } catch (error) {
+    console.error("验证 token 失败:", error);
+    res.status(500).json({ error: "验证 token 过程中发生错误" });
+  }
+});
+
 export default router;
