@@ -174,6 +174,8 @@ __decorate([
 ], PostsController.prototype, "unfavoritePost", null);
 __decorate([
     (0, common_1.Get)(":postId/comments"),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, swagger_1.ApiBearerAuth)(),
     (0, swagger_1.ApiOperation)({ summary: "获取文章评论" }),
     (0, swagger_1.ApiParam)({ name: "postId", description: "文章ID" }),
     __param(0, (0, common_1.Param)("postId", common_1.ParseIntPipe)),

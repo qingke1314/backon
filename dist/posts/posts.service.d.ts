@@ -8,14 +8,8 @@ export declare class PostsService {
         published?: string;
         lastEditedAfter?: string;
     }): Promise<{
-        id: number;
-        title: string;
-        published: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        lastEditedAt: Date;
-        previewText: string;
-        authorId: number;
+        isUserOwner: boolean;
+        isFavoritedByCurrentUser: boolean;
         author: {
             id: number;
             name: string;
@@ -24,8 +18,18 @@ export declare class PostsService {
             id: number;
             name: string;
         }[];
-        isUserOwner: boolean;
-        isFavoritedByCurrentUser: boolean;
+        favoritedBy: {
+            userId: number;
+        }[];
+        id: number;
+        title: string;
+        content: string;
+        published: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        lastEditedAt: Date | null;
+        previewText: string | null;
+        authorId: number;
     }[]>;
     getPostById(id: number, currentUserId: number): Promise<{
         id: number;

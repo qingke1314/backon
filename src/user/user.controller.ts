@@ -17,7 +17,6 @@ import {
 } from "@nestjs/swagger";
 import { UserService } from "./user.service";
 import { CreateUserDto } from "./dto/create-user.dto";
-import { LoginDto } from "./dto/login.dto";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { GetUser } from "../auth/get-user.decorator";
 
@@ -30,12 +29,6 @@ export class UserController {
   @ApiOperation({ summary: "用户注册" })
   async create(@Body() createUserDto: CreateUserDto) {
     return this.userService.create(createUserDto);
-  }
-
-  @Post("login")
-  @ApiOperation({ summary: "用户登录" })
-  async login(@Body() loginDto: LoginDto) {
-    return this.userService.login(loginDto);
   }
 
   @Post("changePassword")
@@ -86,13 +79,5 @@ export class UserController {
     @UploadedFile() file: Express.Multer.File
   ) {
     return this.userService.uploadAvatar(userId, file);
-  }
-
-  @Post("validateToken")
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: "验证并刷新 token" })
-  async validateToken(@GetUser("userId") userId: number) {
-    return this.userService.validateToken(userId);
   }
 }

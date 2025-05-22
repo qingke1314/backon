@@ -1,31 +1,17 @@
-import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateUserDto } from "./dto/create-user.dto";
-import { LoginDto } from "./dto/login.dto";
 export declare class UserService {
     private prisma;
-    private jwtService;
-    constructor(prisma: PrismaService, jwtService: JwtService);
+    constructor(prisma: PrismaService);
     create(createUserDto: CreateUserDto): Promise<{
         message: string;
         status: number;
         success: boolean;
         data: {
+            id: number;
             email: string;
             name: string;
-            id: number;
             createdAt: Date;
-        };
-    }>;
-    login(loginDto: LoginDto): Promise<{
-        success: boolean;
-        token: string;
-        user: {
-            id: number;
-            email: string;
-            name: string;
-            avatar: string;
-            phoneNumber: string;
         };
     }>;
     changePassword(userId: number, oldPassword: string, newPassword: string): Promise<{
@@ -36,9 +22,9 @@ export declare class UserService {
         message: string;
         success: boolean;
         data: {
+            id: number;
             email: string;
             name: string;
-            id: number;
             createdAt: Date;
             updatedAt: Date;
             avatar: string;
@@ -51,16 +37,5 @@ export declare class UserService {
             url: string;
         };
         message: string;
-    }>;
-    validateToken(userId: number): Promise<{
-        success: boolean;
-        token: string;
-        user: {
-            id: number;
-            email: string;
-            name: string;
-            avatar: string;
-            phoneNumber: string;
-        };
     }>;
 }

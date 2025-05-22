@@ -4,18 +4,13 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../prisma/prisma.service";
 import * as bcrypt from "bcrypt";
 import { CreateUserDto } from "./dto/create-user.dto";
-import { LoginDto } from "./dto/login.dto";
 
 @Injectable()
 export class UserService {
-  constructor(
-    private prisma: PrismaService,
-    private jwtService: JwtService
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   async create(createUserDto: CreateUserDto) {
     const existingUser = await this.prisma.user.findUnique({
@@ -48,36 +43,6 @@ export class UserService {
       status: 201,
       success: true,
       data: newUser,
-    };
-  }
-
-  async login(loginDto: LoginDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: loginDto.email },
-    });
-
-    if (!user) {
-      throw new NotFoundException("用户未注册");
-    }
-
-    const isMatch = await bcrypt.compare(loginDto.password, user.password);
-    if (!isMatch) {
-      throw new UnauthorizedException("邮箱或密码不正确");
-    }
-
-    const payload = { userId: user.id, email: user.email };
-    const token = this.jwtService.sign(payload);
-
-    return {
-      success: true,
-      token: token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        avatar: user.avatar,
-        phoneNumber: user.phoneNumber,
-      },
     };
   }
 
@@ -114,6 +79,14 @@ export class UserService {
   }
 
   async updateProfile(userId: number, updateData: any) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException("用户未找到");
+    }
+
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },
       data: updateData,
@@ -147,31 +120,6 @@ export class UserService {
       success: true,
       data: { url: fileUrl },
       message: "头像上传成功",
-    };
-  }
-
-  async validateToken(userId: number) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-    });
-
-    if (!user) {
-      throw new NotFoundException("用户未找到");
-    }
-
-    const payload = { userId: user.id, email: user.email };
-    const newToken = this.jwtService.sign(payload);
-
-    return {
-      success: true,
-      token: newToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        avatar: user.avatar,
-        phoneNumber: user.phoneNumber,
-      },
     };
   }
 }

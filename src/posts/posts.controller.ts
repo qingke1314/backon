@@ -155,6 +155,8 @@ export class PostsController {
   }
 
   @Get(":postId/comments")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: "获取文章评论" })
   @ApiParam({ name: "postId", description: "文章ID" })
   async getComments(@Param("postId", ParseIntPipe) postId: number) {

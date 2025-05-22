@@ -1,6 +1,5 @@
 import { UserService } from "./user.service";
 import { CreateUserDto } from "./dto/create-user.dto";
-import { LoginDto } from "./dto/login.dto";
 export declare class UserController {
     private readonly userService;
     constructor(userService: UserService);
@@ -9,21 +8,10 @@ export declare class UserController {
         status: number;
         success: boolean;
         data: {
+            id: number;
             email: string;
             name: string;
-            id: number;
             createdAt: Date;
-        };
-    }>;
-    login(loginDto: LoginDto): Promise<{
-        success: boolean;
-        token: string;
-        user: {
-            id: number;
-            email: string;
-            name: string;
-            avatar: string;
-            phoneNumber: string;
         };
     }>;
     changePassword(userId: number, body: {
@@ -37,9 +25,9 @@ export declare class UserController {
         message: string;
         success: boolean;
         data: {
+            id: number;
             email: string;
             name: string;
-            id: number;
             createdAt: Date;
             updatedAt: Date;
             avatar: string;
@@ -52,16 +40,5 @@ export declare class UserController {
             url: string;
         };
         message: string;
-    }>;
-    validateToken(userId: number): Promise<{
-        success: boolean;
-        token: string;
-        user: {
-            id: number;
-            email: string;
-            name: string;
-            avatar: string;
-            phoneNumber: string;
-        };
     }>;
 }

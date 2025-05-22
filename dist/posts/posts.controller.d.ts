@@ -3,14 +3,8 @@ export declare class PostsController {
     private readonly postsService;
     constructor(postsService: PostsService);
     getAllPosts(userId: number, isFavorited?: string, authorId?: string, published?: string, lastEditedAfter?: string): Promise<{
-        id: number;
-        title: string;
-        published: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        lastEditedAt: Date;
-        previewText: string;
-        authorId: number;
+        isUserOwner: boolean;
+        isFavoritedByCurrentUser: boolean;
         author: {
             id: number;
             name: string;
@@ -19,8 +13,18 @@ export declare class PostsController {
             id: number;
             name: string;
         }[];
-        isUserOwner: boolean;
-        isFavoritedByCurrentUser: boolean;
+        favoritedBy: {
+            userId: number;
+        }[];
+        id: number;
+        title: string;
+        content: string;
+        published: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        lastEditedAt: Date | null;
+        previewText: string | null;
+        authorId: number;
     }[]>;
     getPostById(id: number, userId: number): Promise<{
         id: number;

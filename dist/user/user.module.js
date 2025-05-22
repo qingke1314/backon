@@ -10,7 +10,6 @@ exports.UserModule = void 0;
 const common_1 = require("@nestjs/common");
 const user_controller_1 = require("./user.controller");
 const user_service_1 = require("./user.service");
-const jwt_1 = require("@nestjs/jwt");
 const platform_express_1 = require("@nestjs/platform-express");
 const multer_1 = require("multer");
 const path_1 = require("path");
@@ -23,14 +22,10 @@ exports.UserModule = UserModule = __decorate([
     (0, common_1.Module)({
         imports: [
             auth_module_1.AuthModule,
-            jwt_1.JwtModule.register({
-                secret: process.env.JWT_SECRET,
-                signOptions: { expiresIn: "1d" },
-            }),
             platform_express_1.MulterModule.register({
                 storage: (0, multer_1.diskStorage)({
                     destination: "./public/uploads/avatars",
-                    filename: (req, file, callback) => {
+                    filename: (_req, file, callback) => {
                         const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
                         callback(null, `${uniqueSuffix}${(0, path_1.extname)(file.originalname)}`);
                     },

@@ -18,7 +18,6 @@ const platform_express_1 = require("@nestjs/platform-express");
 const swagger_1 = require("@nestjs/swagger");
 const user_service_1 = require("./user.service");
 const create_user_dto_1 = require("./dto/create-user.dto");
-const login_dto_1 = require("./dto/login.dto");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const get_user_decorator_1 = require("../auth/get-user.decorator");
 let UserController = class UserController {
@@ -28,9 +27,6 @@ let UserController = class UserController {
     async create(createUserDto) {
         return this.userService.create(createUserDto);
     }
-    async login(loginDto) {
-        return this.userService.login(loginDto);
-    }
     async changePassword(userId, body) {
         return this.userService.changePassword(userId, body.oldPassword, body.newPassword);
     }
@@ -39,9 +35,6 @@ let UserController = class UserController {
     }
     async uploadAvatar(userId, file) {
         return this.userService.uploadAvatar(userId, file);
-    }
-    async validateToken(userId) {
-        return this.userService.validateToken(userId);
     }
 };
 exports.UserController = UserController;
@@ -53,14 +46,6 @@ __decorate([
     __metadata("design:paramtypes", [create_user_dto_1.CreateUserDto]),
     __metadata("design:returntype", Promise)
 ], UserController.prototype, "create", null);
-__decorate([
-    (0, common_1.Post)("login"),
-    (0, swagger_1.ApiOperation)({ summary: "用户登录" }),
-    __param(0, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [login_dto_1.LoginDto]),
-    __metadata("design:returntype", Promise)
-], UserController.prototype, "login", null);
 __decorate([
     (0, common_1.Post)("changePassword"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
@@ -107,16 +92,6 @@ __decorate([
     __metadata("design:paramtypes", [Number, Object]),
     __metadata("design:returntype", Promise)
 ], UserController.prototype, "uploadAvatar", null);
-__decorate([
-    (0, common_1.Post)("validateToken"),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
-    (0, swagger_1.ApiBearerAuth)(),
-    (0, swagger_1.ApiOperation)({ summary: "验证并刷新 token" }),
-    __param(0, (0, get_user_decorator_1.GetUser)("userId")),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number]),
-    __metadata("design:returntype", Promise)
-], UserController.prototype, "validateToken", null);
 exports.UserController = UserController = __decorate([
     (0, swagger_1.ApiTags)("用户"),
     (0, common_1.Controller)("users"),

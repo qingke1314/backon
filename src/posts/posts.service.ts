@@ -105,16 +105,7 @@ export class PostsService {
     });
 
     return postsFromDb.map((post) => ({
-      id: post.id,
-      title: post.title,
-      published: post.published,
-      createdAt: post.createdAt,
-      updatedAt: post.updatedAt,
-      lastEditedAt: post.lastEditedAt,
-      previewText: post.previewText,
-      authorId: post.authorId,
-      author: post.author,
-      categories: post.categories,
+      ...post,
       isUserOwner: post.authorId === currentUserId,
       isFavoritedByCurrentUser: post.favoritedBy && post.favoritedBy.length > 0,
     }));

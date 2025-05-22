@@ -11,13 +11,11 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserService = void 0;
 const common_1 = require("@nestjs/common");
-const jwt_1 = require("@nestjs/jwt");
 const prisma_service_1 = require("../prisma/prisma.service");
 const bcrypt = require("bcrypt");
 let UserService = class UserService {
-    constructor(prisma, jwtService) {
+    constructor(prisma) {
         this.prisma = prisma;
-        this.jwtService = jwtService;
     }
     async create(createUserDto) {
         const existingUser = await this.prisma.user.findUnique({
@@ -48,31 +46,6 @@ let UserService = class UserService {
             data: newUser,
         };
     }
-    async login(loginDto) {
-        const user = await this.prisma.user.findUnique({
-            where: { email: loginDto.email },
-        });
-        if (!user) {
-            throw new common_1.NotFoundException("用户未注册");
-        }
-        const isMatch = await bcrypt.compare(loginDto.password, user.password);
-        if (!isMatch) {
-            throw new common_1.UnauthorizedException("邮箱或密码不正确");
-        }
-        const payload = { userId: user.id, email: user.email };
-        const token = this.jwtService.sign(payload);
-        return {
-            success: true,
-            token: token,
-            user: {
-                id: user.id,
-                email: user.email,
-                name: user.name,
-                avatar: user.avatar,
-                phoneNumber: user.phoneNumber,
-            },
-        };
-    }
     async changePassword(userId, oldPassword, newPassword) {
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
@@ -96,6 +69,12 @@ let UserService = class UserService {
         };
     }
     async updateProfile(userId, updateData) {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+        });
+        if (!user) {
+            throw new common_1.NotFoundException("用户未找到");
+        }
         const updatedUser = await this.prisma.user.update({
             where: { id: userId },
             data: updateData,
@@ -127,32 +106,10 @@ let UserService = class UserService {
             message: "头像上传成功",
         };
     }
-    async validateToken(userId) {
-        const user = await this.prisma.user.findUnique({
-            where: { id: userId },
-        });
-        if (!user) {
-            throw new common_1.NotFoundException("用户未找到");
-        }
-        const payload = { userId: user.id, email: user.email };
-        const newToken = this.jwtService.sign(payload);
-        return {
-            success: true,
-            token: newToken,
-            user: {
-                id: user.id,
-                email: user.email,
-                name: user.name,
-                avatar: user.avatar,
-                phoneNumber: user.phoneNumber,
-            },
-        };
-    }
 };
 exports.UserService = UserService;
 exports.UserService = UserService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        jwt_1.JwtService])
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
 ], UserService);
 //# sourceMappingURL=user.service.js.map

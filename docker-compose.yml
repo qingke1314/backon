@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=mysql://root:password@db:3306/your_database
+      - JWT_SECRET=your-production-jwt-secret
+      - JWT_EXPIRES_IN=7d
+    depends_on:
+      - db
+    volumes:
+      - ./uploads:/app/uploads
+
+  db:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=your_database
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:
